@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-
+const  {jwtAuthMiddleware, generateToken} = require("../jwt");
 
 // database schema requre
 const Person = require("../models/personModel");
-router.post("/person", async (req, res) => {
+router.post("/signup", async (req, res) => {
    try{
          // here get data from the body parser
     const data = req.body; // assuming the request body contains the person data
@@ -15,7 +15,14 @@ router.post("/person", async (req, res) => {
     // saved the new person in the database
     const saveData = await newPerson.save();
     console.log("Data saved");
-    res.status(200).json(saveData);
+  
+    const payLoad = {
+        id: saveData.id,
+        username: saveData.username
+    }
+
+    const token = generateToken(payLoad);
+    res.status(200).json({saveData: saveData, token: token});
    }
    catch(err){
     console.log(err);
@@ -25,9 +32,41 @@ router.post("/person", async (req, res) => {
    }
 })
 
+// Create login api
+router.post("/login", async (req, res) => {
+    try{
+       
+        //  extract the username and password from the request body
+    const {username, password} = req.body;
 
+    // find user by username from database
+    const user = await Person.findOne({username: username});
 
-router.get("/person", async (req, res) => {
+    // if user does not exist or password does not exist then return error
+    if(!user || !(await user.comparePassword(password))){
+        return res.status(401).json({
+            message: "Invalid username or password"
+        })
+    }
+
+    // if user are found then generate token
+    const payload = {
+        id: user.id,
+        username: user.username
+    }
+
+    const token = generateToken(payload);
+
+    // return token as response
+    res.json({token});
+    }
+    catch(err){
+       console.log(err);
+       res.status(500).json({message: "Internal serer error"});
+    }
+})
+
+router.get("/person",jwtAuthMiddleware, async (req, res) => {
     try{
        const findData = await Person.find();
        console.log("Data Fetched");
@@ -60,7 +99,7 @@ router.get("/person/:work", async (req, res) => {
     }
     catch(err){
         console.log(err);
-        req.status(500).json({
+        res.status(500).json({
             message: "Internal server error"
         })
     }
@@ -123,5 +162,6 @@ router.delete("/person/:id", async (req, res) => {
    }
     
 })
+
 
 module.exports = router;
